@@ -119,7 +119,7 @@ def otp_decrypt(cipher, key):
 
 
 # ---------------- Streamlit GUI ----------------
-st.title("🔐 Substitution Cipher GUI")
+st.title("🔐 encryption and decryption tool ")
 
 cipher_choice = st.sidebar.radio("Select Cipher:", 
                                  ["Caesar Cipher", "Playfair Cipher", "Hill Cipher", "One-Time Pad"])
