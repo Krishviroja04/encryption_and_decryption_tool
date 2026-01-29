@@ -29,74 +29,105 @@ def playfair_encrypt_pair(pair, matrix):
     pos = {matrix[i,j]: (i,j) for i in range(5) for j in range(5)}
     a, b = pair
     ra, ca = pos[a]; rb, cb = pos[b]
-    if ra == rb:  # same row
+    if ra == rb:  
         return matrix[ra,(ca+1)%5] + matrix[rb,(cb+1)%5]
-    elif ca == cb:  # same column
+    elif ca == cb:  
         return matrix[(ra+1)%5,ca] + matrix[(rb+1)%5,cb]
-    else:  # rectangle
+    else:  
         return matrix[ra,cb] + matrix[rb,ca]
 
 def playfair_decrypt_pair(pair, matrix):
     pos = {matrix[i,j]: (i,j) for i in range(5) for j in range(5)}
     a, b = pair
     ra, ca = pos[a]; rb, cb = pos[b]
-    if ra == rb:  # same row
+    if ra == rb:  
         return matrix[ra,(ca-1)%5] + matrix[rb,(cb-1)%5]
-    elif ca == cb:  # same column
+    elif ca == cb:  
         return matrix[(ra-1)%5,ca] + matrix[(rb-1)%5,cb]
-    else:  # rectangle
+    else:  
         return matrix[ra,cb] + matrix[rb,ca]
 
 def playfair_encrypt(text, key):
+    if not key: return "Please enter a keyword"
     matrix = generate_playfair_matrix(key)
     text = "".join([c for c in text.upper().replace("J","I") if c.isalpha()])
     pairs = []
     i = 0
     while i < len(text):
         a = text[i]
-        b = text[i+1] if i+1 < len(text) else "X"
-        if a == b:
+        if i+1 < len(text):
+            b = text[i+1]
+            if a == b:
+                pairs.append((a,"X"))
+                i += 1
+            else:
+                pairs.append((a,b))
+                i += 2
+        else:
             pairs.append((a,"X"))
             i += 1
-        else:
-            pairs.append((a,b))
-            i += 2
     return "".join(playfair_encrypt_pair(p,matrix) for p in pairs)
 
 def playfair_decrypt(text, key):
+    if not key: return "Please enter a keyword"
     matrix = generate_playfair_matrix(key)
     text = "".join([c for c in text.upper().replace("J","I") if c.isalpha()])
-    pairs = [(text[i], text[i+1]) for i in range(0,len(text),2)]
-    return "".join(playfair_decrypt_pair(p,matrix) for p in pairs)
+    if len(text) % 2 != 0: return "Invalid Ciphertext length"
+    
+    pairs = [(text[i], text[i+1]) for i in range(0, len(text), 2)]
+    decrypted_text = "".join(playfair_decrypt_pair(p, matrix) for p in pairs)
+    
+    final_result = ""
+    for i in range(len(decrypted_text)):
+        if i > 0 and i < len(decrypted_text) - 1:
+            if decrypted_text[i] == 'X' and decrypted_text[i-1] == decrypted_text[i+1]:
+                continue # Skip the X
+        final_result += decrypted_text[i]
+    
+    return final_result.rstrip('X')
 
 
-# ---------------- Hill Cipher ----------------
+# ---------------- Hill Cipher (Improved Math) ----------------
+def modInverse(a, m):
+    for x in range(1, m):
+        if (((a % m) * (x % m)) % m == 1):
+            return x
+    return -1
+
 def mod_inverse_matrix(matrix, modulus=26):
-    det = int(round(np.linalg.det(matrix))) % modulus
-    det_inv = pow(det, -1, modulus)  # modular inverse of determinant
-    matrix_modinv = (det_inv * np.round(det * np.linalg.inv(matrix)).astype(int)) % modulus
-    return matrix_modinv
+    # For 2x2 matrix: [[a, b], [c, d]]
+    a, b, c, d = matrix[0,0], matrix[0,1], matrix[1,0], matrix[1,1]
+    det = (a*d - b*c) % modulus
+    det_inv = modInverse(det, modulus)
+    if det_inv == -1:
+        return None
+    # Adjugate matrix mod 26
+    inv_matrix = np.array([[d, -b], [-c, a]]) * det_inv
+    return inv_matrix % modulus
 
 def hill_encrypt(text, key_matrix):
     text = "".join([c for c in text.upper() if c.isalpha()])
-    while len(text)%2!=0:
+    while len(text) % 2 != 0:
         text += "X"
     result = ""
-    for i in range(0,len(text),2):
+    for i in range(0, len(text), 2):
         vec = np.array([ord(text[i])-65, ord(text[i+1])-65])
-        enc = key_matrix.dot(vec) % 26
+        enc = np.dot(key_matrix, vec) % 26
         result += chr(int(enc[0])+65) + chr(int(enc[1])+65)
     return result
 
 def hill_decrypt(cipher, key_matrix):
+    inv_matrix = mod_inverse_matrix(key_matrix, 26)
+    if inv_matrix is None: return "Matrix is not invertible!"
     cipher = "".join([c for c in cipher.upper() if c.isalpha()])
     result = ""
-    inv_matrix = mod_inverse_matrix(key_matrix, 26)
-    for i in range(0,len(cipher),2):
+    for i in range(0, len(cipher), 2):
         vec = np.array([ord(cipher[i])-65, ord(cipher[i+1])-65])
-        dec = inv_matrix.dot(vec) % 26
+        dec = np.dot(inv_matrix, vec) % 26
         result += chr(int(dec[0])+65) + chr(int(dec[1])+65)
-    return result
+    
+    # This line removes the padding 'X' at the very end
+    return result.rstrip('X')
 
 
 # ---------------- One-Time Pad ----------------
@@ -105,6 +136,8 @@ def generate_key(length):
 
 def otp_encrypt(message, key):
     message = "".join([c for c in message.upper() if c.isalpha()])
+    key = "".join([c for c in key.upper() if c.isalpha()])
+    if len(key) < len(message): return "Key is too short!"
     result = ""
     for m,k in zip(message,key):
         result += chr(((ord(m)-65)+(ord(k)-65))%26 + 65)
@@ -112,6 +145,8 @@ def otp_encrypt(message, key):
 
 def otp_decrypt(cipher, key):
     cipher = "".join([c for c in cipher.upper() if c.isalpha()])
+    key = "".join([c for c in key.upper() if c.isalpha()])
+    if len(key) < len(cipher): return "Key is too short!"
     result = ""
     for c,k in zip(cipher,key):
         result += chr(((ord(c)-65)-(ord(k)-65))%26 + 65)
@@ -119,7 +154,8 @@ def otp_decrypt(cipher, key):
 
 
 # ---------------- Streamlit GUI ----------------
-st.title("🔐 encryption and decryption tool ")
+st.set_page_config(page_title="Cipher GUI", layout="wide")
+st.title("🔐 Substitution Cipher GUI")
 
 cipher_choice = st.sidebar.radio("Select Cipher:", 
                                  ["Caesar Cipher", "Playfair Cipher", "Hill Cipher", "One-Time Pad"])
@@ -177,7 +213,10 @@ elif cipher_choice == "One-Time Pad":
         if st.button("Generate Key", key="otp_key_btn"):
             st.session_state['otp_key'] = generate_key(len(msg))
             st.info(f"Generated Key: {st.session_state['otp_key']}")
-        key = st.text_input("Key:", value=st.session_state.get('otp_key', ""), key="otp_key_enc")
+        
+        current_key = st.session_state.get('otp_key', "")
+        key = st.text_input("Key:", value=current_key, key="otp_key_enc")
+        
         if st.button("Encrypt", key="otp_enc_btn"):
             st.success(otp_encrypt(msg, key))
     with col2:
